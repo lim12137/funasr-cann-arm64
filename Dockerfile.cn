@@ -1,0 +1,45 @@
+# 国内构建专用 Dockerfile（给阿里云 ACR 等国内环境使用）
+#
+# 与 Dockerfile 的唯一实质差异：
+#   1. base 镜像改用华为 SWR 镜像（registry-1.docker.io 在国内常 i/o timeout）
+#   2. pip 走清华源（torch/torch-npu/funasr/modelscope 体积大，换源更稳）
+# 版本严格对齐 Dockerfile：CANN 8.0.RC1 + py3.8，torch-npu==2.1.0.post10 不受影响。
+
+# 构建阶段：只负责装 Python 依赖，装到已知目录
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/ascendai/cann:8.0.rc1-910b-ubuntu22.04-py3.8-linuxarm64 AS builder
+
+# 国内 pip 源（清华），覆盖本阶段所有 pip 调用
+ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt update && apt install -y --no-install-recommends git wget && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m pip install --upgrade pip && \
+    python3 -m pip install --no-cache-dir --target=/opt/pylibs \
+        "numpy<2.0" \
+        torch==2.1.0 \
+        torch-npu==2.1.0.post10 \
+        funasr \
+        modelscope
+
+# 运行阶段
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/ascendai/cann:8.0.rc1-910b-ubuntu22.04-py3.8-linuxarm64
+
+# 运行时真正需要的系统库（ffmpeg/libsndfile 在推理时要用）
+RUN apt update && apt install -y --no-install-recommends libsndfile1 ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
+# 拷贝构建阶段装好的 Python 依赖
+COPY --from=builder /opt/pylibs /opt/pylibs
+
+ENV ASCEND_HOME_PATH=/usr/local/Ascend/ascend-toolkit/latest
+ENV LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/lib64:${LD_LIBRARY_PATH}
+ENV PYTHONPATH=/opt/pylibs:${PYTHONPATH}
+
+RUN mkdir -p /workspace/models
+ENV MODELSCOPE_CACHE=/workspace/models
+ENV FUNASR_CACHE_DIR=/workspace/models
+
+WORKDIR /workspace
+CMD ["npu-smi", "info"]
