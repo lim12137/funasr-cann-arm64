@@ -44,7 +44,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: crpi-fs24haezdztsodhc.cn-guangzhou.personal.cr.aliyuncs.com
-          username: 1580875610333943
+          username: "1580875610333943"
           password: ${{ secrets.ALIYUN_ACR_PWD }}
 
       - name: Build and push
