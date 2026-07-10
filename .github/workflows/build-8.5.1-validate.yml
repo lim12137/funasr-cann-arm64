@@ -28,6 +28,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Free disk space for CANN image build
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift
+          sudo docker system prune --all --force
+          df -h /
+
       - name: Set up QEMU (arm64 emulation)
         uses: docker/setup-qemu-action@v3
         with:
@@ -79,4 +86,4 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/funasr-cann:${{ github.event.inputs.tag || '8.5.1-validate' }}
             crpi-fs24haezdztsodhc.cn-guangzhou.personal.cr.aliyuncs.com/hopemyl/funasr:${{ github.event.inputs.tag || '8.5.1-validate' }}
           cache-from: type=gha,scope=funasr-8.5.1-validate
-          cache-to: type=gha,mode=max,scope=funasr-8.5.1-validate
+          cache-to: type=gha,mode=min,scope=funasr-8.5.1-validate
