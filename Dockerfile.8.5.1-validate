@@ -37,7 +37,7 @@ ENV MODELSCOPE_OFFLINE=1
 
 RUN chmod 0755 /usr/local/bin/verify-npu-models && \
     python3 -m py_compile /opt/verify/verify_npu_models.py && \
-    python3 -c "import funasr, modelscope, torch, torch_npu; print(torch.__version__)"
+    python3 -m pip check
 
 WORKDIR /workspace
 ENTRYPOINT ["verify-npu-models"]

@@ -12,6 +12,7 @@
 
 - Keep `Dockerfile`, `.github/workflows/build.yml`, and tag `8.0-rc1` unchanged.
 - Use `ascendai/cann:8.5.1-910b-ubuntu22.04-py3.11` only after the workflow's `linux/arm64` manifest preflight passes.
+- Because GitHub-hosted x86 runners execute ARM64 code under QEMU, Docker build validation uses `pip check` and script compilation only; `torch` and `torch_npu` imports run exclusively in the native NPU-server validator.
 - Do not copy, download, or bake model weights into the image.
 - The runtime accepts only local `NANO_MODEL_DIR`, `VAD_MODEL_DIR`, and `SPK_MODEL_DIR` paths.
 - Keep ModelScope and Hugging Face in offline mode at runtime.

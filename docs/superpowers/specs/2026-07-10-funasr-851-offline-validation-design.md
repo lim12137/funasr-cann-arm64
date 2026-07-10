@@ -43,7 +43,7 @@ An independent `build-8.5.1-validate.yml` workflow runs on GitHub-hosted Ubuntu 
 - `ghcr.io/lim12137/funasr-cann:8.5.1-validate`
 - `crpi-fs24haezdztsodhc.cn-guangzhou.personal.cr.aliyuncs.com/hopemyl/funasr:8.5.1-validate`
 
-The GitHub runner has no Ascend device. It verifies the base image, dependency installation, and Python imports only. The NPU server executes the runtime validator.
+The GitHub runner has no Ascend device and runs ARM64 under QEMU. It verifies the base image, dependency metadata with `pip check`, and Python script syntax only. The NPU server executes the runtime validator, including real `torch` and `torch_npu` imports.
 
 ## Non-Goals
 
