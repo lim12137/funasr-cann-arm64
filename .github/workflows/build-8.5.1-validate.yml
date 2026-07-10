@@ -38,8 +38,19 @@ jobs:
 
       - name: Verify CANN base image supports ARM64
         run: |
-          docker buildx imagetools inspect "$CANN_BASE" --format '{{json .Manifest}}' | tee /tmp/cann-manifest.json
-          grep -q '"architecture":"arm64"' /tmp/cann-manifest.json
+          docker buildx imagetools inspect "$CANN_BASE" --format '{{json .Manifest}}' > /tmp/cann-manifest.json
+          python3 - <<'PY'
+          import json
+
+          with open("/tmp/cann-manifest.json", encoding="utf-8") as source:
+              manifest = json.load(source)
+
+          platforms = [item.get("platform", {}) for item in manifest.get("manifests", [])]
+          if not any(platform.get("os") == "linux" and platform.get("architecture") == "arm64" for platform in platforms):
+              raise SystemExit(f"{manifest['digest']} has no linux/arm64 manifest")
+
+          print(f"CANN_BASE_ARM64_DIGEST={manifest['digest']}")
+          PY
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
