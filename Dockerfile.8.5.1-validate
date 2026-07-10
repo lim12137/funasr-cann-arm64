@@ -1,0 +1,43 @@
+ARG CANN_BASE=ascendai/cann:8.5.1-910b-ubuntu22.04-py3.11
+FROM ${CANN_BASE}
+
+ARG NANO_REV=2a2778765678ab5f15239b9dc181839e892d7006
+ARG VAD_CAMPP_REV=eba9c2ed4fed2adc838322376d8df6278b82c2bc
+ARG TORCH_NPU_WHEEL=https://gitcode.com/Ascend/pytorch/releases/download/v7.3.1-pytorch2.9.0/torch_npu-2.9.0.post1-cp311-cp311-manylinux_2_28_aarch64.whl
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        ffmpeg \
+        git \
+        libsndfile1 && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY requirements-8.5.1-validate.txt /tmp/requirements.txt
+RUN python3 -m pip install --no-cache-dir --upgrade pip && \
+    python3 -m pip install --no-cache-dir \
+        torch==2.9.0 \
+        torchaudio==2.9.0 && \
+    python3 -m pip install --no-cache-dir "${TORCH_NPU_WHEEL}" && \
+    python3 -m pip install --no-cache-dir -r /tmp/requirements.txt
+
+RUN git clone https://atomgit.com/gyccc/FunAudioLLM-Fun-ASR-Nano-2512-NPU.git /opt/src/funasr-nano && \
+    git -C /opt/src/funasr-nano checkout "${NANO_REV}" && \
+    git clone https://atomgit.com/Ascend-SACT/FunASR_VAD-SenseVoiceSmall-CAMPPlus.git /opt/src/funasr-vad-campp && \
+    git -C /opt/src/funasr-vad-campp checkout "${VAD_CAMPP_REV}"
+
+COPY verify/verify_npu_models.py /opt/verify/verify_npu_models.py
+COPY verify/entrypoint.sh /usr/local/bin/verify-npu-models
+
+ENV ASCEND_HOME_PATH=/usr/local/Ascend/ascend-toolkit/latest
+ENV LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/lib64:${LD_LIBRARY_PATH}
+ENV PYTHONPATH=/opt/src/funasr-nano:/opt/src/funasr-vad-campp:${PYTHONPATH}
+ENV HF_HUB_OFFLINE=1
+ENV HF_DATASETS_OFFLINE=1
+ENV MODELSCOPE_OFFLINE=1
+
+RUN chmod 0755 /usr/local/bin/verify-npu-models && \
+    python3 -m py_compile /opt/verify/verify_npu_models.py && \
+    python3 -c "import funasr, modelscope, torch, torch_npu; print(torch.__version__)"
+
+WORKDIR /workspace
+ENTRYPOINT ["verify-npu-models"]
