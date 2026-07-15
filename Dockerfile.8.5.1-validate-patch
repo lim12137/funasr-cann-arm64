@@ -1,70 +1,27 @@
 # ============================================================================
-# 补丁镜像 (Temporary Patch)
+# 补丁镜像 (Thin Patch — 只装缺失依赖)
 # ============================================================================
-# 已修复的问题：
-#   1. 缺少 transformers -> pip install transformers
-#   2. transformers 依赖链不完整 -> transformers 自动拉取 deps
-#   3. 缺少 tiktoken -> pip install tiktoken (real, not shim)
-#   4. regex 不支持 \p{} -> pip install regex (real, not shim)
-#   5. pure-Python tiktoken 不稳定 -> 使用真正的 tiktoken
+# 基于已有的 8.5.1-validate 镜像，仅添加缺失的 Python 包：
+#   - transformers >= 4.46
+#   - regex (支持 \p{L} / \p{N} Unicode 属性)
+#   - tiktoken (BPE 分词器)
 #
-# 注意：此镜像仅作为临时修复，正式修复见 Dockerfile.8.5.1-validate 更新。
+# 新层大小：~150 MB 压缩 / ~600 MB 解压
 # ============================================================================
 
-ARG CANN_BASE=ascendai/cann:8.5.1-910b-ubuntu22.04-py3.11
-FROM ${CANN_BASE}
+ARG BASE_IMAGE=ghcr.io/lim12137/funasr-cann:8.5.1-validate
+FROM ${BASE_IMAGE}
 
-ARG NANO_REV=2a2778765678ab5f15239b9dc181839e892d7006
-ARG VAD_CAMPP_REV=eba9c2ed4fed2adc838322376d8df6278b82c2bc
-ARG TORCH_NPU_WHEEL=https://gitcode.com/Ascend/pytorch/releases/download/v7.3.1-pytorch2.9.0/torch_npu-2.9.0.post1-cp311-cp311-manylinux_2_28_aarch64.whl
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        ffmpeg \
-        git \
-        libsndfile1 && \
-    rm -rf /var/lib/apt/lists/*
-
-COPY requirements-8.5.1-validate.txt /tmp/requirements.txt
-RUN python3 -m pip install --no-cache-dir --upgrade pip && \
-    python3 -m pip install --no-cache-dir \
-        torch==2.9.0 \
-        torchaudio==2.9.0 && \
-    python3 -m pip install --no-cache-dir "${TORCH_NPU_WHEEL}" && \
-    python3 -m pip install --no-cache-dir -r /tmp/requirements.txt
-
-# ---- PATCH: 安装所有缺失的依赖 -----------------------------------------------
-# Fix #1: transformers (包含 huggingface_hub, httpx, tokenizers 等)
-# Fix #2: regex 真扩展包 (支持 \p{L} / \p{N} Unicode 属性)
-# Fix #3: tiktoken 真扩展包 (BPE 分词器)
+# 只装 3 个缺失包，不重装 torch / funasr / modelscope 等已有包
 RUN python3 -m pip install --no-cache-dir \
         "transformers>=4.46" \
         "regex" \
         "tiktoken"
 
-RUN git clone https://atomgit.com/gyccc/FunAudioLLM-Fun-ASR-Nano-2512-NPU.git /opt/src/funasr-nano && \
-    git -C /opt/src/funasr-nano checkout "${NANO_REV}" && \
-    git clone https://atomgit.com/Ascend-SACT/FunASR_VAD-SenseVoiceSmall-CAMPPlus.git /opt/src/funasr-vad-campp && \
-    git -C /opt/src/funasr-vad-campp checkout "${VAD_CAMPP_REV}"
-
-COPY verify/verify_npu_models.py /opt/verify/verify_npu_models.py
-COPY verify/entrypoint.sh /usr/local/bin/verify-npu-models
-# shim 文件放在单独目录，仅作紧急手动注入用
-# 紧急: cp /opt/verify/shim/*.py /usr/local/lib/python3.11/site-packages/
+# 紧急运行时 shim（真实包已装，仅作备用）
 COPY verify/shim/ /opt/verify/shim/
 
-ENV ASCEND_HOME_PATH=/usr/local/Ascend/ascend-toolkit/latest
-ENV LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/lib64:${LD_LIBRARY_PATH}
-ENV PYTHONPATH=/opt/src/funasr-nano:/opt/src/funasr-vad-campp:${PYTHONPATH}
-ENV HF_HUB_OFFLINE=1
-ENV HF_DATASETS_OFFLINE=1
-ENV MODELSCOPE_OFFLINE=1
-
-RUN chmod 0755 /usr/local/bin/verify-npu-models && \
-    python3 -m py_compile /opt/verify/verify_npu_models.py && \
-    python3 -c "from importlib.metadata import version; \
-        packages = ('torch', 'torchaudio', 'torch-npu', 'funasr', 'modelscope', 'transformers', 'tiktoken', 'regex'); \
-        [print(f'{package}={version(package)}') for package in packages]"
-
-WORKDIR /workspace
-ENTRYPOINT ["verify-npu-models"]
+# 验证新包可导入
+RUN python3 -c "from importlib.metadata import version; \
+    packages = ('transformers', 'tiktoken', 'regex'); \
+    [print(f'{package}={version(package)}') for package in packages]"
