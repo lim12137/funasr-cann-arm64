@@ -4,3 +4,5 @@ soundfile
 scipy
 librosa
 editdistance
+transformers>=4.46
+tiktoken
